@@ -9,10 +9,10 @@ import {
     TouchableOpacity, 
     Alert 
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; // Importando ícones
-import { emailValidator, passwordValidator } from './validators.js'; // Importando nossos validadores
+import { Ionicons } from '@expo/vector-icons'; // Importando icones
+import { emailValidator, passwordValidator } from '../../utils/validators';
 
-// As cores que você definiu no seu App.js, para manter a consistência
+// As cores que voce definiu no seu App.js, para manter a consistencia
 const COLORS = {
     primary: '#1A73E8',
     secondary: '#1A2E4C',
@@ -78,6 +78,10 @@ export default function LoginScreen({ navigation }) {
                 <Text style={styles.buttonText}>Entrar</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity onPress={() => navigation.navigate('AgentArea')} style={styles.agentButton}>
+                <Text style={styles.agentButtonText}>Entrar como Agente</Text>
+            </TouchableOpacity>
+
             {/* Links Finais */}
             <TouchableOpacity onPress={() => Alert.alert('WIP', 'Tela de "Esqueci a senha" em construção.')}>
                 <Text style={styles.linkText}>Esqueceu sua senha?</Text>
@@ -87,6 +91,8 @@ export default function LoginScreen({ navigation }) {
             <TouchableOpacity onPress={() => navigation.navigate('Criacao')}>
                 <Text style={styles.linkText}>Criar sua conta</Text>
             </TouchableOpacity>
+
+
         </View>
     );
 }
@@ -149,5 +155,17 @@ const styles = StyleSheet.create({
         color: COLORS.primary,
         marginTop: 20,
         fontSize: 14,
-    }
+    },
+
+
+    agentButton: {
+        marginTop: 12,
+        alignSelf: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+  backgroundColor: '#222',
+},
+agentButtonText: { color: '#fff', fontWeight: '700' }
+
 });

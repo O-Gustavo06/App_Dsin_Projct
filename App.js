@@ -1,6 +1,7 @@
 // App.js
 import React from 'react';
-import AppNavigator from './AppNavigator';
+import AppNavigator from './src/navigation/AppNavigator';
+
 
 export default function App() {
   // O App agora só carrega o Navegador.
