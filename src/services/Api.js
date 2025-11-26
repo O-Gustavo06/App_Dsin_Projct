@@ -1,92 +1,106 @@
-// apiService.js
-const DEFAULT_BASE = 'http://localhost:7133'; // ajuste aqui conforme ambiente
-
-// Dicas:
-// - No Android emulator (AVD) use: 'http://10.0.2.2:7133'
-// - No Genymotion: 'http://10.0.3.2:7133'
-// - No iOS simulator: 'http://localhost:7133'
-// - Em produção use a URL real do backend (https).
-
+const DEFAULT_BASE = __DEV__ ? 'http://10.0.2.2:7133' : 'https://localhost:7133/swagger';
 export let BASE_URL = DEFAULT_BASE;
 
-// helper para trocar dinamicamente (útil em dev)
-export const setBaseUrl = (url) => {
-  BASE_URL = url;
-};
+// função util para trocar base em runtime (útil para testes)
+export function setBaseUrl(url) { BASE_URL = url; }
 
-const defaultHeaders = {
+// cabeçalhos padrão
+const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
-  Accept: 'application/json',
 };
 
-// util: parseia corpo apenas se for JSON
-const parseJsonSafe = async (response) => {
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    try {
-      return await response.json();
-    } catch (err) {
-      // corpo inválido
-      return null;
-    }
+// parse JSON com segurança (caso resposta seja vazia ou HTML)
+async function safeParseJSON(response) {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch (e) {
+    // se for HTML (ex.: você deixou /swagger) retornará erro controlado
+    const err = new Error('Invalid JSON response from server');
+    err.raw = text;
+    throw err;
   }
-  return null;
-};
+}
 
-// util: requisição centralizada
-const request = async (path, options = {}) => {
-  const url = `${BASE_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
-  const headers = { ...defaultHeaders, ...(options.headers || {}) };
-  const opts = { ...options, headers };
+// request wrapper
+export async function request(path, { method = 'GET', headers = {}, body = null, timeout = 10000 } = {}) {
+  const url = `${BASE_URL}${path.startsWith('/') ? path : '/' + path}`;
+  const hdrs = { ...DEFAULT_HEADERS, ...headers };
+
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const res = await fetch(url, opts);
+    const init = { method, headers: hdrs, signal: controller.signal };
+    // só adicionar body para métodos que aceitam body
+    if (method !== 'GET' && method !== 'HEAD' && body != null) init.body = body;
 
-    const data = await parseJsonSafe(res);
+    const res = await fetch(url, init);
+    clearTimeout(id);
+
+    // parse seguro
+    const data = await safeParseJSON(res);
 
     if (!res.ok) {
-      // tenta enviar mensagem de erro útil
-      const message = (data && (data.message || data.error)) || `HTTP ${res.status} - ${res.statusText}`;
-      const err = new Error(message);
+      const err = new Error((data && data.message) || `HTTP ${res.status}`);
       err.status = res.status;
-      err.body = data;
+      err.data = data;
       throw err;
     }
-
     return data;
-  } catch (error) {
-    // log útil para desenvolvimento
-    console.error(`API request error: ${options.method || 'GET'} ${url}`, error);
-    throw error;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Request timeout');
+    throw err;
   }
-};
+}
 
-/* -------------------------
-  Endpoints
-   ------------------------- */
+/* =====================
+   Endpoints principais
+   ===================== */
 
-export const login = async (email, password) => {
-  return request('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
-};
+// Wrapper para login (tenta endpoints comuns)
+export async function login(email, password) {
+  const payload = JSON.stringify({ email, password });
+  const tries = [
+    { path: '/api/Auth/login', method: 'POST' },
+    { path: '/api/Usuario/login', method: 'POST' },
+    { path: '/api/Usuario', method: 'POST' },
+  ];
 
-export const register = async (name, email, password) => {
-  return request('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ name, email, password }),
-  });
-};
+  for (const t of tries) {
+    try {
+      return await request(t.path, { method: t.method, body: payload });
+    } catch (err) {
+      if (err.status === 404 || err.status === 405) continue;
+      throw err;
+    }
+  }
+  throw new Error('Nenhum endpoint de login disponível. Verifique BASE_URL.');
+}
 
-export const purchaseCredits = async (amount, authToken) => {
-  if (!authToken) throw new Error('Auth token required');
+// Usuários
+export const listUsuarios = () => request('/api/Usuario', { method: 'GET' });
+export const getUsuario = (id) => request(`/api/Usuario/${id}`, { method: 'GET' });
+export const createUsuario = (dto) => request('/api/Usuario', { method: 'POST', body: JSON.stringify(dto) });
 
-  return request('/credits/purchase', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${authToken}`,
-    },
-    body: JSON.stringify({ amount }),
-  });
-};
+// Vagas
+export const listVagas = () => request('/api/Vaga', { method: 'GET' });
+export const createVaga = (dto) => request('/api/Vaga', { method: 'POST', body: JSON.stringify(dto) });
+
+// Veículos
+export const listVeiculos = () => request('/api/Veiculo', { method: 'GET' });
+export const createVeiculo = (dto) => request('/api/Veiculo', { method: 'POST', body: JSON.stringify(dto) });
+
+// Tickets
+export const listTickets = () => request('/api/Ticket', { method: 'GET' });
+export const createTicket = (dto) => request('/api/Ticket', { method: 'POST', body: JSON.stringify(dto) });
+
+// Authenticated helpers
+export function authRequest(token) {
+  const hdr = { Authorization: `Bearer ${token}` };
+  return {
+    getVagas: () => request('/api/Vaga', { method: 'GET', headers: hdr }),
+    createTicket: (dto) => request('/api/Ticket', { method: 'POST', body: JSON.stringify(dto), headers: hdr }),
+    // adicione outros endpoints autenticados aqui
+  };
+}

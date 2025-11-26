@@ -34,10 +34,21 @@ export default function LoginScreen({ navigation }) {
             return; // Para a execução se houver erro
         }
 
-        // 2. Se tudo estiver OK, navega para a Home
-        // (Aqui é onde você, no futuro, chamaria o Firebase ou sua API)
-        console.log('Login com:', email, password);
-        navigation.navigate('Home');
+        // 2. Se tudo estiver OK, exibe alerta de sucesso e só após confirmação navega para a Home
+        Alert.alert(
+          'Sucesso',
+          'Login realizado com sucesso.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                console.log('Login com:', email, password);
+                navigation.navigate('Home');
+              }
+            }
+          ],
+          { cancelable: false }
+        );
     };
 
     return (
@@ -91,8 +102,6 @@ export default function LoginScreen({ navigation }) {
             <TouchableOpacity onPress={() => navigation.navigate('Criacao')}>
                 <Text style={styles.linkText}>Criar sua conta</Text>
             </TouchableOpacity>
-
-
         </View>
     );
 }
@@ -156,16 +165,13 @@ const styles = StyleSheet.create({
         marginTop: 20,
         fontSize: 14,
     },
-
-
     agentButton: {
         marginTop: 12,
         alignSelf: 'center',
         paddingVertical: 10,
         paddingHorizontal: 16,
         borderRadius: 8,
-  backgroundColor: '#222',
-},
-agentButtonText: { color: '#fff', fontWeight: '700' }
-
+        backgroundColor: '#222',
+    },
+    agentButtonText: { color: '#fff', fontWeight: '700' }
 });

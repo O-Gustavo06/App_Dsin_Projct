@@ -21,17 +21,16 @@ import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../../styles/colors';
 
 // serviço da Fake API (ver src/services/PaymentApi.js)
+// se não existir, as funções devem dar fallback; aqui suponho que existam
 import { payParkingSession, getWallet, updateWallet } from '../../services/PaymentApi';
 
 const STORAGE_KEY = '@parking_spots_v3';
 const HIDDEN_KEY = '@hidden_spots_v1';
 const BALANCE_KEY = '@user_balance';
-const USER_ID = 1; // se você tiver autenticação, substitua pelo id do usuário real
+const USER_ID = 1;
 
 const DEFAULT_PIN_IMAGE = { uri: 'https://cdn-icons-png.flaticon.com/512/684/684908.png' };
-
-// TARIFA: valor em reais por minuto
-const RATE_PER_MINUTE = 0.1; // R$0.10 / min (ajuste conforme quiser)
+const RATE_PER_MINUTE = 0.1;
 
 const INITIAL_SPOTS = [
   { id: 1, title: 'Vaga Quadra Unimar', description: 'Vaga disponível', latitude: -22.2328, longitude: -49.9762 },
@@ -55,17 +54,16 @@ function formatTotalTime(totalMinutes) {
 export default function HomeScreen({ navigation }) {
   const [showSplash, setShowSplash] = useState(true);
   const [sessionActive, setSessionActive] = useState(false);
-  const [time, setTime] = useState(0); // segundos
-  const [totalTime, setTotalTime] = useState(2); // minutos
+  const [time, setTime] = useState(0);
+  const [totalTime, setTotalTime] = useState(2);
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [inputTime, setInputTime] = useState('30');
   const [spots, setSpots] = useState([]);
   const [hiddenSpots, setHiddenSpots] = useState(new Set());
 
-  // pagamento
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [sessionMinutesUsed, setSessionMinutesUsed] = useState(0);
-  const [userBalance, setUserBalance] = useState(0); // em reais
+  const [userBalance, setUserBalance] = useState(0);
   const [isPaying, setIsPaying] = useState(false);
 
   const mapCenterRef = useRef({
@@ -78,7 +76,6 @@ export default function HomeScreen({ navigation }) {
   const selectedSpotRef = useRef(selectedSpot);
   useEffect(() => { selectedSpotRef.current = selectedSpot; }, [selectedSpot]);
 
-  // load inicial: spots, hidden, balance
   const loadSpots = async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
@@ -106,7 +103,6 @@ export default function HomeScreen({ navigation }) {
 
   const loadBalance = async () => {
     try {
-      // primeiro carregamos local (rápido)
       const raw = await AsyncStorage.getItem(BALANCE_KEY);
       if (raw) {
         const val = Number(raw);
@@ -116,7 +112,6 @@ export default function HomeScreen({ navigation }) {
         await AsyncStorage.setItem(BALANCE_KEY, '0');
       }
 
-      // depois tentamos sincronizar com API (se configurada)
       try {
         const wallet = await getWallet(USER_ID);
         if (wallet && typeof wallet.balance !== 'undefined') {
@@ -125,8 +120,7 @@ export default function HomeScreen({ navigation }) {
           await AsyncStorage.setItem(BALANCE_KEY, String(remote));
         }
       } catch (err) {
-        // API pode não estar configurada -> mantemos saldo local
-        // console.warn('Wallet API unreachable', err.message || err);
+        // fallback: manter saldo local
       }
     } catch (err) {
       console.warn('Erro ao carregar balance', err);
@@ -150,7 +144,6 @@ export default function HomeScreen({ navigation }) {
     }, [])
   );
 
-  // persist hiddenSpots
   useEffect(() => {
     (async () => {
       try {
@@ -161,7 +154,6 @@ export default function HomeScreen({ navigation }) {
     })();
   }, [hiddenSpots]);
 
-  // persist balance local
   useEffect(() => {
     (async () => {
       try {
@@ -172,13 +164,15 @@ export default function HomeScreen({ navigation }) {
     })();
   }, [userBalance]);
 
-  // timer
+  // Timer
   useEffect(() => {
     let interval = null;
     if (sessionActive) {
       interval = setInterval(() => {
         setTime(prev => {
-          if (prev >= totalTime * 60 - 1) {
+          const next = prev + 1;
+          if (next >= totalTime * 60) {
+            // fim da sessão
             const sel = selectedSpotRef.current;
             if (sel && sel.id != null) {
               setHiddenSpots(prevSet => {
@@ -190,13 +184,13 @@ export default function HomeScreen({ navigation }) {
             if (interval) clearInterval(interval);
             setSessionActive(false);
             setSelectedSpot(null);
-            const usedMinutes = Math.ceil((prev + 1) / 60);
+            const usedMinutes = Math.ceil(next / 60);
             setSessionMinutesUsed(usedMinutes);
             setPaymentModalVisible(true);
             Alert.alert('Fim do Tempo', 'Sua sessão encerrou e será cobrada.');
             return 0;
           }
-          return prev + 1;
+          return next;
         });
       }, 1000);
     } else {
@@ -205,7 +199,7 @@ export default function HomeScreen({ navigation }) {
     return () => { if (interval) clearInterval(interval); };
   }, [sessionActive, totalTime]);
 
-  // handlers de mapa/vaga
+  // Handlers mapa / vaga
   const onMarkerAction = (spot) => {
     Alert.alert(
       spot.title,
@@ -232,10 +226,8 @@ export default function HomeScreen({ navigation }) {
     else setSelectedSpot({ id: spot.id, title: spot.title });
   };
 
-  // iniciar / parar sessão (FAB)
   const handleFabPress = () => {
     if (sessionActive) {
-      // parar sessão -> abrir modal de pagamento com tempo usado
       const sel = selectedSpotRef.current;
       if (sel && sel.id != null) {
         setHiddenSpots(prevSet => {
@@ -253,7 +245,6 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    // iniciar
     if (!selectedSpot) {
       Alert.alert('Atenção', 'Selecione uma vaga no mapa.');
       return;
@@ -301,22 +292,18 @@ export default function HomeScreen({ navigation }) {
     Alert.alert('OK', 'Todas as vagas ocultas foram exibidas.');
   };
 
-  // --- PAGAMENTO: cálculo e processamento via Fake API (com fallback) ---
   const calcFare = (minutes) => {
     const fare = minutes * RATE_PER_MINUTE;
     return Math.round(fare * 100) / 100;
   };
 
-  // principal: tenta chamar a API para processar pagamento
   const handlePayWithTickets = async () => {
     setIsPaying(true);
     const fare = calcFare(sessionMinutesUsed);
 
     try {
-      // tenta processar pagamento na Fake API: POST /payments (payParkingSession)
       try {
         const apiRes = await payParkingSession(USER_ID, fare, 'balance');
-        // espera que a API retorne algo como { status: 'approved', transactionId, ... }
         if (!apiRes || apiRes.status !== 'approved') {
           const msg = (apiRes && apiRes.message) ? apiRes.message : 'Pagamento negado pela API';
           Alert.alert('Pagamento não aprovado', msg);
@@ -324,18 +311,14 @@ export default function HomeScreen({ navigation }) {
           return;
         }
 
-        // se aprovado, atualiza saldo na API (GET wallet -> PUT wallet) e localmente
         try {
           const wallet = await getWallet(USER_ID);
           const currentRemote = wallet && wallet.balance ? Number(wallet.balance) : 0;
           const newRemote = Math.round((currentRemote - fare) * 100) / 100;
-          // atualiza na API
           await updateWallet(USER_ID, newRemote);
-          // atualiza local
           setUserBalance(newRemote);
           await AsyncStorage.setItem(BALANCE_KEY, String(newRemote));
         } catch (syncErr) {
-          // se não conseguir atualizar carteira na API, tentamos apenas atualizar localmente
           const newLocal = Math.round((userBalance - fare) * 100) / 100;
           setUserBalance(newLocal);
           await AsyncStorage.setItem(BALANCE_KEY, String(newLocal));
@@ -344,14 +327,12 @@ export default function HomeScreen({ navigation }) {
         setPaymentModalVisible(false);
         Alert.alert('Pagamento aprovado', `Transação: ${apiRes.transactionId || 'N/A'}`);
       } catch (apiErr) {
-        // se API falhar (timeout, etc), tentamos fallback local: deduzir saldo local se houver
-        const localFare = fare;
-        if (userBalance >= localFare) {
-          const newLocal = Math.round((userBalance - localFare) * 100) / 100;
+        if (userBalance >= fare) {
+          const newLocal = Math.round((userBalance - fare) * 100) / 100;
           setUserBalance(newLocal);
           await AsyncStorage.setItem(BALANCE_KEY, String(newLocal));
           setPaymentModalVisible(false);
-          Alert.alert('Pagamento local efetuado', `Pagamento de R$ ${localFare.toFixed(2)} deduzido do seu saldo local.`);
+          Alert.alert('Pagamento local efetuado', `Pagamento de R$ ${fare.toFixed(2)} deduzido do seu saldo local.`);
         } else {
           Alert.alert('Pagamento falhou', 'API de pagamento indisponível e saldo local insuficiente.');
         }
@@ -393,7 +374,10 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       <View style={styles.menuBar}>
-        <TouchableOpacity style={styles.menuBarItem} onPress={() => Alert.alert('Menu', 'Em construção')}>
+        <TouchableOpacity
+          style={styles.menuBarItem}
+          onPress={() => navigation.navigate('DadosVeiculo')}
+        >
           <Ionicons name="menu" size={18} color="#fff" />
           <Text style={styles.menuBarText}>Menu</Text>
         </TouchableOpacity>
@@ -556,8 +540,6 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-// estilos omitidos por brevidade — utilize os mesmos estilos que você já tem (copie do seu HomeScreen antigo)
-// abaixo eu mantenho os estilos do seu HomeScreen refatorado (copie/cole sem alterações)
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   header: { height: 60, backgroundColor: COLORS.secondary, justifyContent: 'center', alignItems: 'center', elevation: 4 },
