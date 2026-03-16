@@ -1,0 +1,35 @@
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+
+import LoginScreen from '../screens/Login/LoginScreen';
+import HomeScreen from '../screens/Home/HomeScreen';
+import CriacaoScreen from '../screens/Criacao/CriacaoScreen';
+import TicketsScreen from '../screens/Tickets/TicketsScreen';
+import AgentArea from '../screens/Agent/AgentArea';
+
+// ➕ Import da nova tela
+import DadosVeiculo from '../screens/Veiculo/Dados_veiculo';
+
+const Stack = createStackNavigator();
+
+export default function AppNavigator() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Criacao" component={CriacaoScreen} />
+        <Stack.Screen name="Tickets" component={TicketsScreen} />
+
+        {/* Tela de dados do veículo */}
+        <Stack.Screen name="DadosVeiculo" component={DadosVeiculo} />
+
+        {/* ESTA É A ROTA DO AGENTE */}
+        <Stack.Screen name="AgentArea" component={AgentArea} />
+
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
